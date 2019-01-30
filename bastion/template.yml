@@ -1,0 +1,223 @@
+---
+AWSTemplateFormatVersion:  "2010-09-09"
+
+Mappings:
+  AllowedCidrRanges:
+    my-secure-location:
+      CIDR: "192.168.1.100/32"
+    melbourne-collins:
+    my-more-secure-location:
+      CIDR: "192.168.1.101/32"
+
+Parameters:
+
+  BastionSshKeyName:
+    Description: Sshkey name for the bastion box.
+    Type: String
+
+  BastionInstanceType:
+    Description: Instance type for bastion ec2 box.
+    Type: String
+    Default: t2.nano
+
+  VpcName:
+    Description: Bastion Vpc Name
+    Type: String
+
+Resources:
+
+  BastionASG:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      AutoScalingGroupName: !Sub bastion-${VpcName}
+      AvailabilityZones:
+        Fn::GetAZs:
+          Ref: "AWS::Region"
+      LaunchConfigurationName: !Ref BastionLaunchConfiguration
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 500
+      DesiredCapacity: 0
+      MinSize: 0
+      MaxSize: 1
+      Tags:
+        - Key: Name
+          Value: !Sub bastion-${VpcName}
+          PropagateAtLaunch: true
+      TerminationPolicies:
+        - OldestInstance
+      VPCZoneIdentifier: !Split
+        - ','
+        - Fn::ImportValue:
+            !Sub KubeClusterPublicSubnets-${VpcName}
+
+  BastionLaunchConfiguration:
+    Type: "AWS::AutoScaling::LaunchConfiguration"
+    Metadata:
+      AWS::CloudFormation::Init:
+
+        config:
+          packages:
+            yum:
+              awslogs: []
+          files:
+            /etc/awslogs/awscli.conf:
+              content: !Sub |
+                [default]
+                region = ${AWS::Region}
+                [plugins]
+                cwlogs = cwlogs
+              mode: '000644'
+              owner: root
+              group: root
+            /etc/awslogs/awscli.conf:
+              content: !Sub |
+                [default]
+                region = ${AWS::Region}
+                [plugins]
+                cwlogs = cwlogs
+              mode: '000644'
+              owner: root
+              group: root
+            /etc/awslogs/awslogs.conf:
+              content: !Sub |
+                [general]
+                state_file = /var/lib/awslogs/agent-state
+                [/var/log/messages]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/messages
+                buffer_duration = 5000
+                log_stream_name = {instance_id}/var/log/messages
+                initial_position = start_of_file
+                log_group_name = ${BastionLogGroup}
+                [/var/log/secure]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/secure
+                log_stream_name = {instance_id}/var/log/secure
+                log_group_name = ${BastionLogGroup}
+                initial_position = start_of_file
+              mode: '000644'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              awslogsd:
+                enabled: true
+                ensureRunning: true
+                packages:
+                  yum:
+                  - awslogs
+                files:
+                - '/etc/awslogs/awslogs.conf'
+                - '/etc/awslogs/awscli.conf'
+
+    Properties:
+      KeyName: !Ref BastionSshKeyName
+      ImageId: ami-00e17d1165b9dd3ec
+      InstanceType: !Ref BastionInstanceType
+      IamInstanceProfile: !Ref BastionProfile
+      SecurityGroups:
+      - !Ref BastionSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y aws-cfn-bootstrap
+
+          # Start cfn-init
+          /opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource BastionLaunchConfiguration || error_exit 'Failed to run cfn-init'
+
+          # signal success
+          /opt/aws/bin/cfn-signal -e 0 --region ${AWS::Region} --stack ${AWS::StackName} --resource BastionASG
+
+  BastionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName : !Sub bastion-${VpcName}
+      RetentionInDays: 7
+
+  BastionProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: '/'
+      Roles:
+      - !Ref BastionIAMRole
+
+  BastionIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - 'ec2.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+      - PolicyName: logs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - logs:Describe*
+            Resource:
+            - arn:aws:logs:*:*:*
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub bastion.${VpcName}
+      GroupDescription: Allow traffic from known locations to bastion
+      VpcId: Fn::ImportValue:
+               !Sub KubeClusterVpcId-${VpcName}
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !FindInMap [AllowedCidrRanges, "my-secure-location", CIDR]
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !FindInMap [AllowedCidrRanges, "my-very-secure-location", CIDR]
+      Tags:
+        - Key: Name
+          Value: !Sub bastion-${VpcName}
+
+  BastionAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub allow.bastion.access.${VpcName}
+      GroupDescription: Allow SSH From Bastion
+      VpcId: Fn::ImportValue:
+               !Sub KubeClusterVpcId-${VpcName}
+      Tags:
+      - Key: Name
+        Value: !Sub allow.bastion.access.${VpcName}
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        SourceSecurityGroupId: !Ref BastionSecurityGroup
+
+  ScheduledActionDown:
+    Type: AWS::AutoScaling::ScheduledAction
+    Properties:
+      AutoScalingGroupName: !Ref BastionASG
+      DesiredCapacity: 0
+      MinSize: 0
+      MaxSize: 1
+      Recurrence: "0 19 * * *"
+
+Outputs:
+
+  BastionAccessSecurityGroup:
+    Description: Security group which will be attached to bastions
+    Value: !Ref BastionAccessSecurityGroup
+    Export:
+      Name: !Join ["-", ["KubeCluster-BastionAccessSecurityGroup", !Ref VpcName]]
+

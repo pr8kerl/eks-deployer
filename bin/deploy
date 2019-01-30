@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [ "$#" -lt 2 ]; then
+  echo
+  echo "usage: deploy component clustername"
+  echo "  ie. deploy nodes lebkuchen"
+  exit 255
+fi
+
+component=${1}
+clustername=${2}
+dcr="docker-compose run --rm"
+
+echo 
+echo "--- deploying $clustername $component ---"
+$dcr stackup kube-${component}-${clustername} up \
+  -t ./${component}/template.yml \
+  -p ./${component}/params/${clustername}.yml \
+  -o ClusterName=${clustername}

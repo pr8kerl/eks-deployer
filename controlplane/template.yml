@@ -1,0 +1,194 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon EKS - Control Plane - Released 2018-08-30'
+
+Parameters:
+
+  VpcName:
+    Description: The vpc to associate resources with
+    Type: String
+
+  ClusterName:
+    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+    Type: String
+
+  KubernetesVersion:
+    Description: EKS supported version of Kubernetes to use
+    Type: String
+    Default: 1.11
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "EKS Cluster"
+        Parameters:
+          - ClusterName
+          - ClusterControlPlaneSecurityGroup
+      -
+        Label:
+          default: "Worker Node Configuration"
+        Parameters:
+          - ClusterNodeSecurityGroup
+      -
+        Label:
+          default: "Master Network Configuration"
+        Parameters:
+          - VpcId
+          - Subnets
+
+Resources:
+
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Path: /
+      Policies:
+        -
+          PolicyName: "allow-ec2-describe-all"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "ec2:Describe*"
+                Resource: "*"
+        -
+          PolicyName: "allow-assumerole-for-kube2iam-roles"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "sts:AssumeRole"
+                Resource: "*"
+        -
+          PolicyName: "allow-monitoring-on-aws-resources"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Action:
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:ListMetrics"
+                  - "rds:Describe*"
+                  - "rds:ListTagsForResource"
+                  - "sqs:ListQueues"
+                  - "sqs:GetQueueAttributes"
+                  - "sqs:ListQueueTags"
+                  - "elasticache:ListTagsForResource"
+                  - "elasticache:DescribeCacheClusters"
+                  - "elasticache:DescribeEvents"
+                  - "elasticloadbalancing:DescribeLoadBalancers"
+                  - "elasticloadbalancing:DescribeTags"
+                  - "ec2:DescribeInstances"
+                  - "ec2:DescribeTags"
+                  - "xray:BatchGetTraces"
+                  - "xray:GetTraceSummaries"
+                Effect: "Allow"
+                Resource: "*"
+
+  ControlPlane:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref ClusterName
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - Fn::ImportValue:
+              !Sub KubeCluster-ControlPlaneSecurityGroup-${ClusterName}
+        SubnetIds: 
+          - Fn::ImportValue:
+              !Sub KubeClusterPublicSubnetA-${VpcName}
+          - Fn::ImportValue:
+              !Sub KubeClusterPublicSubnetB-${VpcName}
+          - Fn::ImportValue:
+              !Sub KubeClusterPublicSubnetC-${VpcName}
+          - Fn::ImportValue:
+              !Sub KubeClusterPrivateSubnetA-${VpcName}
+          - Fn::ImportValue:
+              !Sub KubeClusterPrivateSubnetB-${VpcName}
+          - Fn::ImportValue:
+              !Sub KubeClusterPrivateSubnetC-${VpcName}
+      RoleArn: !GetAtt ControlPlaneServiceRole.Arn
+      Version: !Ref KubernetesVersion
+
+  ControlPlaneServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - eks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+
+  PolicyCloudWatchMetrics:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - cloudwatch:PutMetricData
+            Effect: Allow
+            Resource: '*'
+        Version: '2012-10-17'
+      PolicyName: !Sub '${AWS::StackName}-PolicyCloudWatchMetrics'
+      Roles:
+        - !Ref 'ControlPlaneServiceRole'
+
+  PolicyNLB:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - elasticloadbalancing:*
+              - ec2:CreateSecurityGroup
+              - ec2:Describe*
+            Effect: Allow
+            Resource: '*'
+        Version: '2012-10-17'
+      PolicyName: !Sub '${AWS::StackName}-PolicyNLB'
+      Roles:
+        - !Ref 'ControlPlaneServiceRole'
+
+
+Outputs:
+
+  NodeRole:
+    Description: public subnet a
+    Export:
+    Value: !Ref NodeInstanceRole
+    Export:
+      Name: !Join ["-", ["KubeCluster-NodeInstanceRole", !Ref ClusterName]]
+  
+  EksClusterEndpoint:
+    Description: EKS Cluster Endpoint
+    Value: !GetAtt ControlPlane.Endpoint
+
+  KubeClusterCertificateAuthority:
+    Description: EKS Cluster CertificateAuthorityData
+    Value: !GetAtt ControlPlane.CertificateAuthorityData

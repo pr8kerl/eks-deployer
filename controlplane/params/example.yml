@@ -1,0 +1,2 @@
+VpcName: development
+KubernetesVersion: "1.11"

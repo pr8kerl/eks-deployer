@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [ "$#" -lt 1 ]; then
+  echo "Usage: deploy-vpc <emvironment name>"
+  echo "only support development|qa|preprod|prod"
+  exit 255
+fi
+
+echo
+echo "--- deploying vpc $1 ---"
+docker-compose run --rm stackup kube-vpc-${1} up \
+  -t ./vpc/template.yml \
+  -0 EnvironmentName=${1}
+
+echo
+echo "--- deploying bastion $1 ---"
+docker-compose run --rm stackup kube-bastion-${1} up \
+  -t ./bastion/template.yaml \
+  -p ./bastion/params/${1}.yml \
+  -o VpcName=${1}

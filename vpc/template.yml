@@ -1,0 +1,505 @@
+---
+AWSTemplateFormatVersion:  "2010-09-09"
+
+Parameters:
+  EnvironmentName:
+    Description: The environment name to associate resources with
+    Type: String
+
+  VpcCIDR:
+    Description: Please enter the IP CIDR range
+    Type: String
+    Default: 192.168.0.0/16
+
+  AvailabilityZones:
+    Description: The AZs in the target region
+    Type: CommaDelimitedList
+    Default: ap-southeast-2a,ap-southeast-2b,ap-southeast-2c
+
+  PublicSubnetCIDR:
+    Description: The Public CIDR Ranges
+    Type: CommaDelimitedList
+    Default: 192.168.0.0/20,192.168.16.0/20,192.168.32.0/20,192.168.96.0/20
+
+  PrivateSubnetCIDR:
+    Description: The Private CIDR Ranges
+    Type: CommaDelimitedList
+    Default: 192.168.48.0/20,192.168.64.0/20,192.168.80.0/20
+
+  VpcFlowLogRetention:
+    Description: Flow Log Retention in Days
+    Type: String
+    Default: 14
+
+  VpcFlowLogTrafficType:
+    Description: Flow Log Traffic Type
+    Type: String
+    Default: REJECT
+
+  DBSubnetCIDR:
+    Description: CIDR Ranges for DB subnets used by RDS Subnet Groups.
+    Type: CommaDelimitedList
+    Default: 192.168.112.0/20,192.168.128.0/20,192.168.144.0/20
+
+Resources:
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub kube-${EnvironmentName}
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub kube-${EnvironmentName}
+
+  FlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        -
+          Effect: "Allow"
+          Principal:
+            Service:
+              - "vpc-flow-logs.amazonaws.com"
+          Action:
+            - "sts:AssumeRole"
+      Path: "/"
+      RoleName: !Sub kube-${EnvironmentName}-vpc-flow-log
+
+  FlowLogPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "allow_cw_logs"
+      PolicyDocument:
+        Statement:
+        -
+          Effect: "Allow"
+          Action:
+           - "logs:CreateLogGroup"
+           - "logs:CreateLogStream"
+           - "logs:PutLogEvents"
+           - "logs:DescribeLogGroups"
+           - "logs:DescribeLogStreams"
+          Resource: "*"
+      Roles:
+        -
+          !Ref FlowLogRole
+
+  CloudWatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub kube-${EnvironmentName}-flow-logs
+      RetentionInDays: !Ref VpcFlowLogRetention
+
+  FlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn : !GetAtt FlowLogRole.Arn
+      LogGroupName : !Ref CloudWatchLogGroup
+      ResourceId : !Ref VPC
+      ResourceType : VPC
+      TrafficType : ALL
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  KubePublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 0, !Ref PublicSubnetCIDR ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public-a
+        - Key: What
+          Value: !Sub kube-public-subnet
+
+  KubePublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 1, !Ref PublicSubnetCIDR ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public-b
+        - Key: What
+          Value: !Sub kube-public-subnet
+
+  KubePublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 2, !Ref PublicSubnetCIDR ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public-c
+        - Key: What
+          Value: !Sub kube-public-subnet
+
+  PublicServiceSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 3, !Ref PublicSubnetCIDR ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-service-c
+        - Key: What
+          Value: !Sub kube-public-svc-subnet
+
+  KubePrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 0, !Ref PrivateSubnetCIDR ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-a
+        - Key: What
+          Value: !Sub kube-private-subnet
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  KubePrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 1, !Ref PrivateSubnetCIDR ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-b
+        - Key: What
+          Value: !Sub kube-private-subnet
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  KubePrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 2, !Ref PrivateSubnetCIDR ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-c
+        - Key: What
+          Value: !Sub kube-private-subnet
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  NatGatewayAEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGatewayBEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGatewayCEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayAEIP.AllocationId
+      SubnetId: !Ref KubePublicSubnetA
+
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayBEIP.AllocationId
+      SubnetId: !Ref KubePublicSubnetB
+
+  NatGatewayC:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayCEIP.AllocationId
+      SubnetId: !Ref KubePublicSubnetC
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref KubePublicSubnetA
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref KubePublicSubnetB
+
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref KubePublicSubnetC
+
+  PublicServiceSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicServiceSubnet
+
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-a
+
+  DefaultPrivateRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayA
+
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      SubnetId: !Ref KubePrivateSubnetA
+
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-b
+
+  DefaultPrivateRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayB
+
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref KubePrivateSubnetB
+
+  PrivateRouteTableC:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-c
+
+  DefaultPrivateRouteC:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableC
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayC
+
+  PrivateSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableC
+      SubnetId: !Ref KubePrivateSubnetC
+
+  PrivateDBSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 0, !Ref DBSubnetCIDR ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-db-a
+        - Key: What
+          Value: !Sub kube-private-db-subnet
+
+  PrivateDBSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 1, !Ref DBSubnetCIDR ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-db-b
+        - Key: What
+          Value: !Sub kube-private-db-subnet
+
+  PrivateDBSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 2, !Ref DBSubnetCIDR ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-db-c
+        - Key: What
+          Value: !Sub kube-private-db-subnet
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for k8s rds controller
+      SubnetIds:
+        - !Ref PrivateDBSubnetA
+        - !Ref PrivateDBSubnetB
+        - !Ref PrivateDBSubnetC
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from office range to bastion
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub kube-bastion-${EnvironmentName}
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 220.237.116.190/32
+
+Outputs:
+
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Join ["-", ["KubeClusterVpcId", !Ref EnvironmentName]]
+
+  PublicSubnetA:
+    Description: public subnet a
+    Export:
+    Value: !Ref KubePublicSubnetA
+    Export:
+      Name: !Join ["-", ["KubeClusterPublicSubnetA", !Ref EnvironmentName]]
+
+  PublicSubnetB:
+    Description: public subnet b
+    Export:
+    Value: !Ref KubePublicSubnetB
+    Export:
+      Name: !Join ["-", ["KubeClusterPublicSubnetB", !Ref EnvironmentName]]
+
+  PublicSubnetC:
+    Description: public subnet c
+    Export:
+    Value: !Ref KubePublicSubnetC
+    Export:
+      Name: !Join ["-", ["KubeClusterPublicSubnetC", !Ref EnvironmentName]]
+
+  PrivateSubnetA:
+    Description: private subnet a
+    Export:
+    Value: !Ref KubePrivateSubnetA
+    Export:
+      Name: !Join ["-", ["KubeClusterPrivateSubnetA", !Ref EnvironmentName]]
+
+  PrivateSubnetB:
+    Description: private subnet b
+    Export:
+    Value: !Ref KubePrivateSubnetB
+    Export:
+      Name: !Join ["-", ["KubeClusterPrivateSubnetB", !Ref EnvironmentName]]
+
+  PrivateSubnetC:
+    Description: private subnet c
+    Export:
+    Value: !Ref KubePrivateSubnetC
+    Export:
+      Name: !Join ["-", ["KubeClusterPrivateSubnetC", !Ref EnvironmentName]]
+
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [ ",", [ !Ref KubePrivateSubnetA, !Ref KubePrivateSubnetB, !Ref KubePrivateSubnetC ]]
+    Export:
+      Name: !Join ["-", ["KubeClusterPrivateSubnets", !Ref EnvironmentName]]
+
+  PrivateDBSubnets:
+    Description: List of db subnets used by rds subnet group.
+    Value: !Join [ ",", [ !Ref PrivateDBSubnetA, !Ref PrivateDBSubnetB, !Ref PrivateDBSubnetC ]]
+    Export:
+      Name: !Join ["-", ["KubeClusterDBSubnets", !Ref EnvironmentName]]
+
+  NetworkCidr:
+    Description: Network cidr used by ${EnvironmentName} cluster.
+    Value: !Ref VpcCIDR
+    Export:
+      Name: !Join ["-", ["KubeClusterNetworkCidr", !Ref EnvironmentName]]
+
+  NatGateways:
+    Description: Natgateway logical ids in
+    Value: !Join [ ",", [ !Ref NatGatewayA, !Ref NatGatewayB, !Ref NatGatewayC ]]
+    Export:
+      Name: !Join ["-", ["KubeClusterNatGateways", !Ref EnvironmentName]]
+
+  BastionSecurityGroup:
+    Description: Security group which will be attached to bastions
+    Value: !Ref BastionSecurityGroup
+    Export:
+      Name: !Join ["-", ["KubeClusterBastionSecurityGroup", !Ref EnvironmentName]]
+
+  PublicServiceSubnet:
+    Description: Service subnet which is used to provision utilities e.g. bastion.
+    Value: !Ref PublicServiceSubnet
+    Export:
+      Name: !Join ["-", ["KubeClusterPublicServiceSubnet", !Ref EnvironmentName]]
+
+  DBSubnetGroup:
+    Description: RDS Subnet Group for use by k8s rds controller
+    Value: !Ref DBSubnetGroup
+    Export:
+      Name: !Join ["-", ["KubeClusterDBSubnetGroup", !Ref EnvironmentName]]
