@@ -462,6 +462,12 @@ Outputs:
     Export:
       Name: !Join ["-", ["KubeClusterPrivateSubnetC", !Ref EnvironmentName]]
 
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [ ",", [ !Ref KubePublicSubnetA, !Ref KubePublicSubnetB, !Ref KubePublicSubnetC ]]
+    Export:
+      Name: !Join ["-", ["KubeClusterPublicSubnets", !Ref EnvironmentName]]
+
   PrivateSubnets:
     Description: A list of the private subnets
     Value: !Join [ ",", [ !Ref KubePrivateSubnetA, !Ref KubePrivateSubnetB, !Ref KubePrivateSubnetC ]]
@@ -490,7 +496,7 @@ Outputs:
     Description: Security group which will be attached to bastions
     Value: !Ref BastionSecurityGroup
     Export:
-      Name: !Join ["-", ["KubeClusterBastionSecurityGroup", !Ref EnvironmentName]]
+      Name: !Join ["-", ["KubeClusterBastionAccessSecurityGroup", !Ref EnvironmentName]]
 
   PublicServiceSubnet:
     Description: Service subnet which is used to provision utilities e.g. bastion.

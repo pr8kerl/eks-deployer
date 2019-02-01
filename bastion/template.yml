@@ -171,9 +171,10 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: !Sub bastion.${VpcName}
-      GroupDescription: Allow traffic from known locations to bastion
-      VpcId: Fn::ImportValue:
-               !Sub KubeClusterVpcId-${VpcName}
+      GroupDescription: Allow traffic from office range to bastion
+      VpcId: 
+        Fn::ImportValue:
+          !Sub KubeClusterVpcId-${VpcName}
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
@@ -182,7 +183,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: !FindInMap [AllowedCidrRanges, "my-very-secure-location", CIDR]
+          CidrIp: !FindInMap [AllowedCidrRanges, "my-more-secure-location", CIDR]
       Tags:
         - Key: Name
           Value: !Sub bastion-${VpcName}
@@ -192,8 +193,9 @@ Resources:
     Properties:
       GroupName: !Sub allow.bastion.access.${VpcName}
       GroupDescription: Allow SSH From Bastion
-      VpcId: Fn::ImportValue:
-               !Sub KubeClusterVpcId-${VpcName}
+      VpcId: 
+        Fn::ImportValue:
+          !Sub KubeClusterVpcId-${VpcName}
       Tags:
       - Key: Name
         Value: !Sub allow.bastion.access.${VpcName}

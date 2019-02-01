@@ -6,20 +6,24 @@ Creates a vpc that can be shared with other clusters.
 
 All info gleened/derived from what `eksctl` produces.
 
+## Why?
+
+As Paul would say... `Control!`
+
+To understand what an EKS controlplane needs so as to mould into my own image of a perfect environment.
+
 ## How?
 
-* authenticate to aws and set AWS_DEFAULT_REGION
+A vpc is given a name which is then referenced by eks cluster component cloudformation stacks. Let's assume you call your vpc `development`.
+
+An eks cluster is given a unique name or identifier. In the examples below, the cluster is called `lebkuchen` which matches the names of parameter files under each component folder. Decide on your cluster name then copy the `(securitygroups|controlplane|nodes)/params/example.yml` parameter files to your chosen `clustername.yml` files under each folder. Then...
+
+* authenticate to aws and set AWS_DEFAULT_REGION appropriately
 
 * create a vpc which can be shared with multiple clusters
 
   ```
   ./bin/deploy-vpc development
-  ```
-
-* create a bastion asg for use within the vpc
-
-  ```
-  ./bin/deploy bastion development
   ```
 
 * create security groups for a cluster
@@ -39,18 +43,10 @@ All info gleened/derived from what `eksctl` produces.
   ```
   ./bin/deploy controlplane lebkuchen
   ```
-
-* generate kubernetes config
+* configure node authentication to join the cluster
 
   ```
-  aws eks update-kubeconfig --name lebkuchen
-  ```
-
-* get arn for node role from controlplane stack exports
-* update aws-auth-cm.yaml with node instance role arn (todo script this)
-* apply cm yaml
-  ```
-  kubectl apply -f aws-auth-cm.yaml
+  ./bin/auth-nodes lebkuchen
   ```
 
 * create the nodes for a cluster
@@ -58,7 +54,7 @@ All info gleened/derived from what `eksctl` produces.
   ./bin/deploy nodes lebkuchen
   ```
 
-Info about eks kubernetes veersions, patch releases and admission controllers can be found [here](https://docs.aws.amazon.com/eks/latest/userguide/platform-versions.html)
+Info about eks kubernetes versions, patch releases and admission controllers can be found [here](https://docs.aws.amazon.com/eks/latest/userguide/platform-versions.html)
 
 
 ### eksctl example

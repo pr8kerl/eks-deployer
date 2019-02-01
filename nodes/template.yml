@@ -2,13 +2,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'EKS nodes (AMI family: AmazonLinux2, SSH access: false, subnet topology: Public)'
 
-Mappings:
-  AllowedCidrRanges:
-    melbourne-vpn:
-      CIDR: "115.186.198.66/32"
-    melbourne-rich:
-      CIDR: "210.10.223.248/30"
-
 Parameters:
 
   VpcName:
@@ -89,7 +82,7 @@ Resources:
         - Fn::ImportValue:
             !Sub KubeCluster-NodeSecurityGroup-${ClusterName}
         - Fn::ImportValue:
-            !Sub KubeCluster-BastionAccessSecurityGroup-${VpcName}
+            !Sub KubeClusterBastionAccessSecurityGroup-${VpcName}
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
@@ -146,11 +139,9 @@ Resources:
         - Fn::ImportValue:
             !Sub KubeCluster-NodeInstanceRole-${ClusterName}
 
-Outputs:
+#Outputs:
 
- NodeGroupASG:
-    Description: nodegroup autoscaling group
-    Value: !Ref NodeGroup
-    Export:
-      Name: !Join ["-", ["KubeClusterNodeGroupASG", !Ref EnvironmentName]]
-
+#  NodeGroupAsg:
+#    Value: !Ref NodeGroup
+#    Export:
+#      Name: !Sub KubeClusterNodeGroupAsg-${EnvironmentName}
