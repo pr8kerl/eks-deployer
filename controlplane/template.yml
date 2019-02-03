@@ -179,11 +179,16 @@ Resources:
 Outputs:
 
   NodeRole:
-    Description: public subnet a
     Export:
     Value: !Ref NodeInstanceRole
     Export:
       Name: !Join ["-", ["KubeCluster-NodeInstanceRole", !Ref ClusterName]]
+  
+  NodeRoleArn:
+    Export:
+    Value: !GetAtt NodeInstanceRole.Arn
+    Export:
+      Name: !Join ["-", ["KubeCluster-NodeInstanceRoleArn", !Ref ClusterName]]
   
   EksClusterEndpoint:
     Description: EKS Cluster Endpoint

@@ -10,7 +10,7 @@ All info gleened/derived from what `eksctl` produces.
 
 As Paul would say... `Control!`
 
-To understand what an EKS controlplane needs so as to mould into my own image of a perfect environment.
+Also to understand what an EKS cluster needs so as to mould into my own image of a perfect environment.
 
 ## How?
 
@@ -23,38 +23,19 @@ An eks cluster is given a unique name or identifier. In the examples below, the 
 * create a vpc which can be shared with multiple clusters
 
   ```
-  ./bin/deploy-vpc development
+  docker-compose run --rm sh ./bin/deploy-vpc development
   ```
 
-* create security groups for a cluster
+* create an eks cluster
 
   ```
-  ./bin/deploy securitygroups lebkuchen
+  docker-compose run --rm sh ./bin/deploy-cluster lebkuchen
   ```
 
-* tag subnets and vpc for a cluster
+The deploy-cluster script wraps up a number of steps for ease of deployment. Take a look inside if you as it's all pretty straighforward.
 
-  ```
-  ./bin/tag-resources development lebkuchen
-  ```
 
-* create the controlplane for a cluster
-
-  ```
-  ./bin/deploy controlplane lebkuchen
-  ```
-* configure node authentication to join the cluster
-
-  ```
-  ./bin/auth-nodes lebkuchen
-  ```
-
-* create the nodes for a cluster
-  ```
-  ./bin/deploy nodes lebkuchen
-  ```
-
-Info about eks kubernetes versions, patch releases and admission controllers can be found [here](https://docs.aws.amazon.com/eks/latest/userguide/platform-versions.html)
+More info about eks kubernetes versions, patch releases and admission controllers can be found [here](https://docs.aws.amazon.com/eks/latest/userguide/platform-versions.html)
 
 
 ### eksctl example

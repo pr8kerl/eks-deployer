@@ -2,6 +2,7 @@
 version: '3.4'
 
 x-base: &base
+  build: .
   volumes:
     - "$HOME/.kube:/root/.kube"
     - "~/.aws:/root/.aws"
@@ -13,10 +14,13 @@ x-base: &base
 
 services:
 
+  sh:
+    <<: *base
+
   stackup:
     <<: *base
-    image: realestate/stackup
+    entrypoint: stackup
 
   awscli:
     <<: *base
-    image: myobplatform/aws-jq:0.1.0
+    entrypoint: aws

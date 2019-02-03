@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [ "$#" -lt 1 ]; then
+  echo
+  echo "usage: destroy-cluster clustername"
+  echo "  ie. destroy-cluster lebkuchen"
+  exit 255
+fi
+
+clustername=${1}
+
+function destroy() {
+
+  component=${1}
+  if [[ -z "$component" ]]; then
+    echo "error: no component provided to destroy"
+    return 1
+  fi
+  echo 
+  echo "--- destroying $clustername $component ---"
+  stackup kube-${component}-${clustername} down
+
+}
+
+destroy nodes
+destroy controlplane
+destroy securitygroups
+
+echo "cluster $clustername destroyed"
