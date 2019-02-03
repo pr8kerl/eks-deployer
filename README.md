@@ -8,9 +8,7 @@ All info gleened/derived from what `eksctl` produces.
 
 ## Why?
 
-As Paul would say... `Control!`
-
-Also to understand what an EKS cluster needs so as to mould into my own image of a perfect environment.
+To understand what an EKS cluster needs so as to mould into my own image of a perfect environment.
 
 ## How?
 

@@ -1,0 +1,5 @@
+---
+VpcName: development
+Route53HostedZoneId: Z111111111
+ClusterDnsDomain: platform.example.co
+LoadBalancerAllowedIngressCidr: 0.0.0.0/0

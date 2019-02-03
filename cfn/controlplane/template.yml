@@ -17,27 +17,6 @@ Parameters:
     Type: String
     Default: 1.11
 
-Metadata:
-  AWS::CloudFormation::Interface:
-    ParameterGroups:
-      -
-        Label:
-          default: "EKS Cluster"
-        Parameters:
-          - ClusterName
-          - ClusterControlPlaneSecurityGroup
-      -
-        Label:
-          default: "Worker Node Configuration"
-        Parameters:
-          - ClusterNodeSecurityGroup
-      -
-        Label:
-          default: "Master Network Configuration"
-        Parameters:
-          - VpcId
-          - Subnets
-
 Resources:
 
   NodeInstanceRole:

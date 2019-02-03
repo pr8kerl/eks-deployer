@@ -11,12 +11,12 @@ fi
 echo
 echo "--- deploying vpc $1 ---"
 stackup kube-vpc-${1} up \
-  -t ./vpc/template.yml \
+  -t ./cfn/vpc/template.yml \
   -o EnvironmentName=${1}
 
 echo
 echo "--- deploying bastion $1 ---"
 stackup kube-bastion-${1} up \
-  -t ./bastion/template.yml \
-  -p ./bastion/params/${1}.yml \
+  -t ./cfn/bastion/template.yml \
+  -p ./cfn/bastion/params/${1}.yml \
   -o VpcName=${1}

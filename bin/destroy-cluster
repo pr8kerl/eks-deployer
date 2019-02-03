@@ -24,6 +24,7 @@ function destroy() {
 
 }
 
+destroy loadbalancer
 destroy nodes
 destroy controlplane
 destroy securitygroups

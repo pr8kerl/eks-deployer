@@ -1,0 +1,229 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'EKS nodes (AMI family: AmazonLinux2, SSH access: false, subnet topology: Public)'
+
+Parameters:
+
+  VpcName:
+    Description: The vpc name to associate resources with
+    Type: String
+
+  ClusterName:
+    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+    Type: String
+
+  SnsAlarmTopicArn:
+    Type: String
+    Default: ""
+
+  NodePortHttp:
+    Type: String
+    Default: 32080
+  NodePortHttps:
+    Type: String
+    Default: 32443
+  Route53HostedZoneId:
+    Type: String
+  ClusterDnsDomain:
+    Type: String
+  LoadBalancerAllowedIngressCidr:
+    Type: String
+
+Conditions:
+  AddAlarms:
+    !Not [!Equals [!Ref SnsAlarmTopicArn, ""]]
+
+Resources:
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: security group attached to ingress elb.
+      VpcId:
+        Fn::ImportValue:
+          !Sub KubeClusterVpcId-${VpcName}
+      Tags:
+        - Key: Name
+          Value: !Sub kube-ingress-sg-${ClusterName}
+
+  HttpToKubeIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: '80'
+      ToPort: '80'
+      CidrIp: !Ref LoadBalancerAllowedIngressCidr
+      GroupId:
+        Fn::GetAtt:
+        - LoadBalancerSecurityGroup
+        - GroupId
+
+  HttpsToKubeIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !Ref LoadBalancerAllowedIngressCidr
+      GroupId:
+        Fn::GetAtt:
+        - LoadBalancerSecurityGroup
+        - GroupId
+
+  LoadBalancerToKubeInstanceHttpIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: !Ref NodePortHttp
+      ToPort: !Ref NodePortHttps
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+        - LoadBalancerSecurityGroup
+        - GroupId
+      GroupId:
+        Fn::ImportValue:
+            !Sub KubeCluster-NodeSecurityGroup-${ClusterName}
+
+  LoadBlancerToKubeInstanceHttpsIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: !Ref NodePortHttps
+      ToPort: !Ref NodePortHttps
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+        - LoadBalancerSecurityGroup
+        - GroupId
+      GroupId:
+        Fn::ImportValue:
+            !Sub KubeCluster-NodeSecurityGroup-${ClusterName}
+
+  IngressLoadBalancer:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      ConnectionSettings:
+        IdleTimeout: 60
+      Subnets: !Split
+        - ','
+        - Fn::ImportValue:
+            !Sub KubeClusterPublicSubnets-${VpcName}
+      CrossZone: true
+      SecurityGroups:
+      - !Ref LoadBalancerSecurityGroup
+      LoadBalancerName: !Sub kube-ingress-${ClusterName}
+      Listeners:
+      - LoadBalancerPort: 443
+        InstancePort: !Ref NodePortHttps
+        Protocol: TCP
+        InstanceProtocol: TCP
+      - LoadBalancerPort: 80
+        InstancePort: !Ref NodePortHttp
+        Protocol: TCP
+        InstanceProtocol: TCP
+      HealthCheck:
+        Target: !Sub "TCP:${NodePortHttps}"
+        HealthyThreshold: 2
+        UnhealthyThreshold: 6
+        Interval: 10
+        Timeout: 5
+      ConnectionDrainingPolicy:
+        Enabled: true
+        Timeout: 20
+      Scheme: internet-facing
+      Policies:
+        - PolicyName: EnableProxyProtocol
+          PolicyType: ProxyProtocolPolicyType
+          Attributes:
+            - Name: ProxyProtocol
+              Value: 'true'
+          InstancePorts:
+            - !Ref NodePortHttp
+            - !Ref NodePortHttps
+      Tags:
+      - Key: KubernetesCluster
+        Value: !Ref ClusterName
+      - Key: Role
+        Value: KubernetesIngress
+
+  KubeIngressLoadBalancerDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref Route53HostedZoneId
+      Comment: !Sub DNS record for ${ClusterName} ingress
+      Name: !Sub "svcs.${ClusterName}.${ClusterDnsDomain}"
+      Type: CNAME
+      TTL: '300'
+      ResourceRecords:
+        - !GetAtt IngressLoadBalancer.DNSName
+
+  KubeIngressWildcardDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref Route53HostedZoneId
+      Comment: "DNS record for {{ $config.global.clusterName }} cluster services"
+      Comment: !Sub wildcard DNS record for ${ClusterName} ingress
+      Name: !Sub "*.svcs.${ClusterName}.${ClusterDnsDomain}"
+      Type: CNAME
+      TTL: '300'
+      ResourceRecords:
+      - !Sub "svcs.${ClusterName}.${ClusterDnsDomain}"
+
+  HealthyHostAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: No healthy hosts in ELB
+      MetricName: HealthyHostCount
+      Namespace: AWS/ELB
+      Statistic: Maximum
+      Period: '60'
+      EvaluationPeriods: '3'
+      Threshold: '1'
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+      - Name: LoadBalancerName
+        Value: !Ref IngressLoadBalancer
+      AlarmActions:
+        - !If [AddAlarms, !Ref "SnsAlarmTopicArn", !Ref "AWS::NoValue"]
+      OKActions:
+        - !If [AddAlarms, !Ref "SnsAlarmTopicArn", !Ref "AWS::NoValue"]
+      InsufficientDataActions:
+        - !If [AddAlarms, !Ref "SnsAlarmTopicArn", !Ref "AWS::NoValue"]
+
+  SurgeQueueLengthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SurgeQueueLength high
+      MetricName: SurgeQueueLength
+      Namespace: AWS/ELB
+      Statistic: Maximum
+      Period: '60'
+      EvaluationPeriods: '5'
+      Threshold: '600'
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+      - Name: LoadBalancerName
+        Value: !Ref IngressLoadBalancer
+      AlarmActions:
+        - !If [AddAlarms, !Ref "SnsAlarmTopicArn", !Ref "AWS::NoValue"]
+      OKActions:
+        - !If [AddAlarms, !Ref "SnsAlarmTopicArn", !Ref "AWS::NoValue"]
+
+  SpilloverCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SpilloverCount high
+      MetricName: SpilloverCount
+      Namespace: AWS/ELB
+      Statistic: Sum
+      Period: '60'
+      EvaluationPeriods: '3'
+      Threshold: '0'
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: 'notBreaching'
+      Dimensions:
+      - Name: LoadBalancerName
+        Value: !Ref IngressLoadBalancer
+      AlarmActions:
+        - !If [AddAlarms, !Ref "SnsAlarmTopicArn", !Ref "AWS::NoValue"]
+      OKActions:
+        - !If [AddAlarms, !Ref "SnsAlarmTopicArn", !Ref "AWS::NoValue"]

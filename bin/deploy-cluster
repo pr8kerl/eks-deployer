@@ -24,8 +24,8 @@ function deploy() {
   echo 
   echo "--- deploying $clustername $component ---"
   stackup kube-${component}-${clustername} up \
-    -t ./${component}/template.yml \
-    -p ./${component}/params/${clustername}.yml \
+    -t ./cfn/${component}/template.yml \
+    -p ./cfn/${component}/params/${clustername}.yml \
     -o ClusterName=${clustername}
 
 }
@@ -106,23 +106,10 @@ function label-nodes() {
 }
 
 # main
-
-echo
-echo "--- deploying vpc $vpcname ---"
-stackup kube-vpc-${vpcname} up \
-  -t ./vpc/template.yml \
-  -o EnvironmentName=${vpcname}
-
-echo
-echo "--- deploying bastion $vpcname ---"
-stackup kube-bastion-${vpcname} up \
-  -t ./bastion/template.yml \
-  -p ./bastion/params/${vpcname}.yml \
-  -o VpcName=${vpcname}
-
 tag-resources
 deploy securitygroups
 deploy controlplane
 auth-nodes
 deploy nodes
+deploy loadbalancer
 label-nodes
