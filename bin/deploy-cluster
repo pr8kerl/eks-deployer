@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+#------------------------------------------------------------------------------
+# deploy an eks cluster...
+#------------------------------------------------------------------------------
 
 set -euo pipefail
 
@@ -105,11 +108,24 @@ function label-nodes() {
   done
 }
 
+function attach-asg() {
+
+  echo
+  echo "--- attaching loadbalancer for cluster $clustername to node asg ---"
+  aws autoscaling attach-load-balancers \
+            --auto-scaling-group-name kube-${clustername}-nodes \
+            --load-balancer-names kube-ingress-${clustername}
+
+}
+
+#------------------------------------------------------------------------------
 # main
+#------------------------------------------------------------------------------
 tag-resources
 deploy securitygroups
 deploy controlplane
 auth-nodes
 deploy nodes
 deploy loadbalancer
+attach-asg
 label-nodes

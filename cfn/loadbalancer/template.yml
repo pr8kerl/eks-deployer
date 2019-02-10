@@ -70,12 +70,25 @@ Resources:
         - LoadBalancerSecurityGroup
         - GroupId
 
+  IcmpMTUDiscoveryToKubeIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: icmp
+      FromPort: '3'
+      ToPort: '4'
+      CidrIp: !Ref LoadBalancerAllowedIngressCidr
+      GroupId:
+        Fn::GetAtt:
+        - LoadBalancerSecurityGroup
+        - GroupId
+
+
   LoadBalancerToKubeInstanceHttpIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       IpProtocol: tcp
       FromPort: !Ref NodePortHttp
-      ToPort: !Ref NodePortHttps
+      ToPort: !Ref NodePortHttp
       SourceSecurityGroupId:
         Fn::GetAtt:
         - LoadBalancerSecurityGroup
@@ -84,7 +97,7 @@ Resources:
         Fn::ImportValue:
             !Sub KubeCluster-NodeSecurityGroup-${ClusterName}
 
-  LoadBlancerToKubeInstanceHttpsIngress:
+  LoadBalancerToKubeInstanceHttpsIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       IpProtocol: tcp
@@ -109,19 +122,19 @@ Resources:
             !Sub KubeClusterPublicSubnets-${VpcName}
       CrossZone: true
       SecurityGroups:
-      - !Ref LoadBalancerSecurityGroup
+        - !Ref LoadBalancerSecurityGroup
       LoadBalancerName: !Sub kube-ingress-${ClusterName}
       Listeners:
-      - LoadBalancerPort: 443
-        InstancePort: !Ref NodePortHttps
-        Protocol: TCP
-        InstanceProtocol: TCP
-      - LoadBalancerPort: 80
-        InstancePort: !Ref NodePortHttp
-        Protocol: TCP
-        InstanceProtocol: TCP
+        - LoadBalancerPort: 443
+          InstancePort: !Ref NodePortHttps
+          Protocol: tcp
+          InstanceProtocol: tcp
+        - LoadBalancerPort: 80
+          InstancePort: !Ref NodePortHttp
+          Protocol: tcp
+          InstanceProtocol: tcp
       HealthCheck:
-        Target: !Sub "TCP:${NodePortHttps}"
+        Target: !Sub "TCP:${NodePortHttp}"
         HealthyThreshold: 2
         UnhealthyThreshold: 6
         Interval: 10
@@ -137,7 +150,6 @@ Resources:
             - Name: ProxyProtocol
               Value: 'true'
           InstancePorts:
-            - !Ref NodePortHttp
             - !Ref NodePortHttps
       Tags:
       - Key: KubernetesCluster

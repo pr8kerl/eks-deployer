@@ -42,12 +42,13 @@ Resources:
   NodeGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
+      AutoScalingGroupName: !Sub kube-${ClusterName}-nodes
       LaunchConfigurationName: !Ref 'NodeLaunchConfig'
       MaxSize: !Ref NodeGroupMaxSize
       MinSize: !Ref NodeGroupMinSize
       Tags:
         - Key: Name
-          Value: !Sub ${ClusterName}-node
+          Value: !Sub ${ClusterName}-nodes
           PropagateAtLaunch: 'true'
         - Key: !Sub kubernetes.io/cluster/${ClusterName}
           Value: owned
