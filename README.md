@@ -32,6 +32,12 @@ An eks cluster is given a unique name or identifier. In the examples below, the 
 
 The deploy-cluster script wraps up a number of steps for ease of deployment. Take a look inside if you as it's all pretty straighforward.
 
+* delete an eks cluster
+
+  ```
+  docker-compose run --rm sh ./bin/destroy-cluster lebkuchen
+  ```
+
 
 More info about eks kubernetes versions, patch releases and admission controllers can be found [here](https://docs.aws.amazon.com/eks/latest/userguide/platform-versions.html)
 

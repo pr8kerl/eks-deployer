@@ -56,7 +56,7 @@ Resources:
                 Effect: "Allow"
                 Action:
                   - "sts:AssumeRole"
-                Resource: "*"
+                Resource: arn:aws:iam::*:role/k8s/*
         -
           PolicyName: "allow-monitoring-on-aws-resources"
           PolicyDocument:
