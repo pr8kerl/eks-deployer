@@ -1,6 +1,6 @@
 VpcName: development
 NodeGroupMinSize: "2"
 NodeGroupMaxSize: "4"
-NodeImageId: ami-06ade0abbd8eca425
+NodeImageId: ami-0a9b90002a9a1c111
 NodeInstanceType: t2.large
 NodeKeyName: ec2keyname

@@ -83,7 +83,7 @@ Resources:
         - Fn::ImportValue:
             !Sub KubeCluster-NodeSecurityGroup-${ClusterName}
         - Fn::ImportValue:
-            !Sub KubeClusterBastionAccessSecurityGroup-${VpcName}
+            !Sub KubeCluster-BastionAccessSecurityGroup-${VpcName}
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:

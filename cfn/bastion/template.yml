@@ -191,7 +191,7 @@ Resources:
   BastionAccessSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub allow.bastion.access.${VpcName}
+      GroupName: !Sub kube-bastion-access-${VpcName}
       GroupDescription: Allow SSH From Bastion
       VpcId: 
         Fn::ImportValue:
@@ -203,6 +203,10 @@ Resources:
       - IpProtocol: tcp
         FromPort: 22
         ToPort: 22
+        SourceSecurityGroupId: !Ref BastionSecurityGroup
+      - IpProtocol: '-1'
+        FromPort: 0
+        ToPort: 65535
         SourceSecurityGroupId: !Ref BastionSecurityGroup
 
   ScheduledActionDown:
