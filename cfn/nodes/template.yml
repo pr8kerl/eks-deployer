@@ -57,11 +57,18 @@ Resources:
         - ','
         - Fn::ImportValue:
             !Sub KubeClusterPrivateSubnets-${VpcName}
+    CreationPolicy:
+      AutoScalingCreationPolicy:
+        MinSuccessfulInstancesPercent: 100
+      ResourceSignal:
+        Count: !Ref NodeGroupMinSize
+        Timeout: PT5M
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MaxBatchSize: '1'
         MinInstancesInService: !Ref NodeGroupMinSize
         PauseTime: 'PT5M'
+        WaitOnResourceSignals: true
 
   NodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -73,6 +80,31 @@ Resources:
 
   NodeLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            '/etc/systemd/system/node-drain.service':
+              content: !Sub |
+                [Unit]
+                Description="manage k8s node draining on shutdown"
+                Requires=network.target
+                After=network.target
+                ConditionPathExists=/var/lib/kubelet/kubeconfig
+
+                [Service]
+                Type=simple
+                Environment="KUBECONFIG=/var/lib/kubelet/kubeconfig"
+                ExecStart=/bin/bash -c 'kubectl uncordon $(hostname)'
+                ExecStop=/bin/bash -c 'kubectl drain --ignore-daemonsets --delete-local-data --timeout=29s $(hostname)'
+                RemainAfterExit=true
+                TimeoutStopSec=30s
+
+                [Install]
+                WantedBy=multi-user.target
+          mode: '000400'
+          owner: root
+          group: root
     Properties:
       AssociatePublicIpAddress: false
       IamInstanceProfile: !Ref 'NodeInstanceProfile'
@@ -100,6 +132,11 @@ Resources:
                      --stack  ${AWS::StackName} \
                      --resource NodeGroup  \
                      --region ${AWS::Region}
+            # real programmers sleep :)
+            sleep 60
+            KUBECONFIG=/var/lib/kubelet/kubeconfig kubectl label node ${!HOSTNAME} node-role.kubernetes.io/node="" --overwrite=true
+            systemctl enable node-drain
+            systemctl start node-drain
 
   PolicyStackSignal:
     Type: AWS::IAM::Policy
@@ -124,25 +161,3 @@ Resources:
       Roles:
         - Fn::ImportValue:
             !Sub KubeCluster-NodeInstanceRole-${ClusterName}
-
-  PolicyTagDiscovery:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-          - Action:
-              - ec2:DescribeTags
-            Effect: Allow
-            Resource: '*'
-        Version: '2012-10-17'
-      PolicyName: !Sub '${AWS::StackName}-PolicyTagDiscovery'
-      Roles:
-        - Fn::ImportValue:
-            !Sub KubeCluster-NodeInstanceRole-${ClusterName}
-
-#Outputs:
-
-#  NodeGroupAsg:
-#    Value: !Ref NodeGroup
-#    Export:
-#      Name: !Sub KubeClusterNodeGroupAsg-${EnvironmentName}

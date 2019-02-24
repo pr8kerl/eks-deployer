@@ -128,4 +128,3 @@ auth-nodes
 deploy nodes
 deploy loadbalancer
 attach-asg
-label-nodes

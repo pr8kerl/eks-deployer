@@ -57,6 +57,11 @@ Resources:
                 Action:
                   - "sts:AssumeRole"
                 Resource: arn:aws:iam::*:role/k8s/*
+              -
+                Effect: "Allow"
+                Action:
+                  - "sts:AssumeRole"
+                Resource: arn:aws:iam::*:role/k8s/*
         -
           PolicyName: "allow-monitoring-on-aws-resources"
           PolicyDocument:
@@ -66,20 +71,10 @@ Resources:
                 Action:
                   - "cloudwatch:GetMetricStatistics"
                   - "cloudwatch:ListMetrics"
-                  - "rds:Describe*"
-                  - "rds:ListTagsForResource"
-                  - "sqs:ListQueues"
-                  - "sqs:GetQueueAttributes"
-                  - "sqs:ListQueueTags"
-                  - "elasticache:ListTagsForResource"
-                  - "elasticache:DescribeCacheClusters"
-                  - "elasticache:DescribeEvents"
                   - "elasticloadbalancing:DescribeLoadBalancers"
                   - "elasticloadbalancing:DescribeTags"
                   - "ec2:DescribeInstances"
                   - "ec2:DescribeTags"
-                  - "xray:BatchGetTraces"
-                  - "xray:GetTraceSummaries"
                 Effect: "Allow"
                 Resource: "*"
 
