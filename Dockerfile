@@ -13,4 +13,4 @@ RUN curl -LO https://amazon-eks.s3-us-west-2.amazonaws.com/${KUBEVERSION}/2018-1
   && chmod +x aws-iam-authenticator \
   && mv aws-iam-authenticator /usr/local/bin/
 
-ENTRYPOINT [ "bash" ]
+CMD [ "bash" ]

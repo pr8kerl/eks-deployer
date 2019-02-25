@@ -24,3 +24,7 @@ services:
   awscli:
     <<: *base
     entrypoint: aws
+
+  kubectl:
+    <<: *base
+    entrypoint: kubectl
